@@ -1,78 +1,74 @@
 # todo-cli
 
-练手用命令行任务清单工具，提供 **Rust** 与 **Python** 两个实现版本，功能对齐、命令一致。
+> 练手用命令行任务清单工具 · Rust / Python 双版本，命令与功能完全一致
 
-## 功能
+![GitHub release](https://img.shields.io/github/v/release/czwjss/todo-cli)
+![CI](https://img.shields.io/github/actions/workflow/status/czwjss/todo-cli/build.yml)
+![crates.io](https://img.shields.io/crates/v/czwjss-todo-cli)
+![PyPI](https://img.shields.io/pypi/v/czwjss-todo-cli)
+![License](https://img.shields.io/github/license/czwjss/todo-cli)
 
-- 添加 / 列出 / 完成 / 删除任务，统计信息
+## ✨ 功能
+
+- 添加 / 列出 / 完成 / 删除任务，一键统计
 - 中文输出，终端自动配色；`--json` 机器可读输出
-- 成功退出码 0、业务错误 1、参数错误 2；错误信息走 stderr
-- 默认存储 `~/.todo/tasks.json`，可用环境变量 `TODO_DIR` / `TODO_FILE` 覆盖
-- Rust 版含运行时自更新：检测到 GitHub 新版本时交互提示，确认后自动更新
+- 规范退出码：成功 `0`、业务错误 `1`、参数错误 `2`，错误信息走 stderr
+- 数据存于 `~/.todo/tasks.json`，支持 `TODO_DIR` / `TODO_FILE` 环境变量覆盖
+- Rust 版内置自更新：检测到新版本时交互提示，确认后自动更新
 
+```console
+$ todo add "写周报" --priority high
+已添加任务 #1: 写周报
+
+$ todo list
+ 1  [高] 写周报
+
+$ todo done 1
+任务 #1 已完成
+
+$ todo stats
+共 1 个任务：1 完成，0 未完成
 ```
-todo add "任务内容" [--priority high|medium|low]   添加任务
-todo list [--status pending|done] [--json]        列出任务
-todo done <id>                                    标记任务完成
-todo delete <id>                                  删除任务
-todo stats                                        统计信息
-```
 
-## 安装
+## 📦 安装
 
-三种方式安装后的命令均为 `todo`，任选其一：
+安装后命令均为 `todo`，任选其一：
 
-| 方式 | 适用场景 | 命令 |
+| 方式 | 命令 | 说明 |
 | --- | --- | --- |
-| 预编译二进制 | 无需工具链，直接下载 | `curl -fsSL ... -o ~/.local/bin/todo && chmod +x ~/.local/bin/todo` |
-| cargo install | 已有 Rust 工具链 | `cargo install czwjss-todo-cli` |
-| pip install | 已有 Python 环境 | `pip install czwjss-todo-cli` |
+| cargo | `cargo install czwjss-todo-cli` | Rust 版，需 Rust 工具链 |
+| pip | `pip install czwjss-todo-cli` | Python 版，纯标准库零依赖 |
+| 预编译二进制 | 见 [AGENT-INSTALL-BINARY.md](AGENT-INSTALL-BINARY.md) | 免工具链，macOS / Linux / Windows |
 
-### 预编译二进制下载地址
+## 🚀 使用
 
-```bash
-# macOS ARM（Intel 将文件名中的 aarch64 换成 x86_64）
-curl -fsSL https://github.com/czwjss/todo-cli/releases/latest/download/todo-aarch64-apple-darwin -o ~/.local/bin/todo && chmod +x ~/.local/bin/todo
-```
+| 命令 | 说明 |
+| --- | --- |
+| `todo add "内容" [--priority high\|medium\|low]` | 添加任务 |
+| `todo list [--status pending\|done] [--json]` | 列出任务 |
+| `todo done <id>` | 标记完成 |
+| `todo delete <id>` | 删除任务 |
+| `todo stats` | 统计信息 |
+| `todo --help` | 查看帮助 |
 
-其他平台：`todo-x86_64-unknown-linux-gnu`（Linux x86_64）、`todo-x86_64-pc-windows-msvc.exe`（Windows x86_64）。
-
-## 使用示例
-
-```bash
-todo add "写周报" --priority high    # 已添加任务 #1: 写周报
-todo add "买菜"
-todo list                            # 列出未完成任务
-todo done 1                          # 标记任务完成
-todo stats                           # 统计信息
-```
-
-## 验证
+## 🗑️ 卸载
 
 ```bash
-todo --help    # 输出中文帮助，含 add/list/done/delete/stats
+cargo uninstall czwjss-todo-cli     # cargo 安装
+pip uninstall czwjss-todo-cli       # pip 安装
+# 预编译二进制：直接删除下载的文件即可
 ```
 
-## 卸载
+可选清理数据：`rm -rf ~/.todo`
 
-```bash
-# 按安装方式选择其一：
-rm "${HOME}/.local/bin/todo"          # 预编译二进制
-cargo uninstall czwjss-todo-cli        # cargo 安装
-pip uninstall czwjss-todo-cli          # pip 安装
-
-# 可选：清理任务数据
-rm -rf "${HOME}/.todo"
-```
-
-## 项目结构
+## 📁 项目结构
 
 ```
-├── rust/        Rust 版（发布为 crates.io 包 czwjss-todo-cli）
-├── python/      Python 版（发布为 PyPI 包 czwjss-todo-cli，纯标准库零依赖）
-└── .github/workflows/    CI/CD：Build / GitHub Release / crates.io / PyPI
+├── rust/        Rust 版（crates.io 包：czwjss-todo-cli）
+├── python/      Python 版（PyPI 包：czwjss-todo-cli）
+└── .github/     CI/CD 工作流
 ```
 
-## 许可
+## 📄 许可
 
 [MIT](rust/LICENSE)
