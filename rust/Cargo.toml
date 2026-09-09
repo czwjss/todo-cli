@@ -22,3 +22,9 @@ unicode-width = "0.2"                             # 计算终端显示宽度（�
 
 # 运行时自更新：检测 GitHub Release、下载对应平台二进制并替换自身
 self_update = { version = "1.3.0", default-features = false, features = ["ureq", "native-tls", "github"] }
+
+# 发布优化：减小体积（strip 符号 + LTO + 单代码单元）
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
