@@ -44,11 +44,14 @@ $ todo stats
 
 | 命令 | 说明 |
 | --- | --- |
-| `todo add "内容" [--priority high\|medium\|low]` | 添加任务 |
-| `todo list [--status pending\|done] [--json]` | 列出任务 |
-| `todo done <id>` | 标记完成 |
-| `todo delete <id>` | 删除任务 |
-| `todo stats` | 统计信息 |
+| `todo add "内容" [--priority high\|medium\|low] [--due "2026-09-09 18:00"]` | 添加任务（可设截止时间） |
+| `todo list [--status pending\|done] [--sort priority\|created\|due] [--json]` | 列出任务 |
+| `todo done <id> [<id> ...]` | 标记完成（支持多个） |
+| `todo undo <id>` | 恢复为待办 |
+| `todo delete <id> [<id> ...]` | 删除任务（支持多个） |
+| `todo edit <id> [--text ...] [--priority ...] [--due ...] [--no-due]` | 修改任务 |
+| `todo search <关键词> [--status pending\|done] [--json]` | 搜索任务 |
+| `todo stats` | 统计信息（含逾期数） |
 | `todo --help` | 查看帮助 |
 
 ## 🗑️ 卸载

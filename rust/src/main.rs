@@ -1,11 +1,14 @@
 //! todo —— 练手用命令行任务清单工具（Rust 版本）
 //!
 //! 功能与 Python 版本完全对齐：
-//!     todo add "任务内容" --priority high|medium|low   添加任务
-//!     todo list [--status pending|done] [--json]      列出任务
-//!     todo done <id>                                  标记任务完成
-//!     todo delete <id>                                删除任务
-//!     todo stats                                      统计信息
+//!     todo add "任务内容" [--priority high|medium|low] [--due "2026-09-09 18:00"]
+//!     todo list [--status pending|done] [--sort priority|created|due] [--json]
+//!     todo done <id> [<id> ...]                         标记任务完成（支持多个）
+//!     todo undo <id>                                    恢复任务为待办
+//!     todo delete <id> [<id> ...]                       删除任务（支持多个）
+//!     todo edit <id> [--text 新内容] [--priority high] [--due 截止] [--no-due]
+//!     todo search <关键词> [--status pending|done] [--json]
+//!     todo stats                                        统计信息（含逾期数）
 //!
 //! 设计要点（对应 clig.dev 指南）：
 //!     - 使用 clap 解析参数：自动生成 -h/--help、用法错误（退出码 2）
@@ -23,7 +26,7 @@ use std::{
     process,
 };
 
-use chrono::Local;
+use chrono::{Local, NaiveDate, NaiveDateTime};
 use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
@@ -80,6 +83,15 @@ enum Status {
     Done,    // 已完成
 }
 
+/// 列表排序方式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "lowercase")]
+enum SortBy {
+    Priority, // 按优先级（默认）
+    Created,  // 按创建日期
+    Due,      // 按截止时间（无截止的排最后）
+}
+
 /// 单条任务
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Task {
@@ -87,7 +99,9 @@ struct Task {
     text: String,
     priority: Priority,
     status: Status,
-    created_at: String, // 创建日期，如 "2026-09-08"
+    #[serde(default)] // 兼容旧数据文件（无 due 字段）
+    due: Option<String>, // 截止时间，如 "2026-09-09 18:00" 或 "2026-09-09"；None 表示无
+    created_at: String,  // 创建日期，如 "2026-09-08"
 }
 
 /// 整个数据文件的结构
@@ -154,6 +168,8 @@ fn save_data(path: &PathBuf, data: &Data) {
 
 /// 颜色重置码
 const RESET: &str = "\x1b[0m";
+/// 红色（逾期标记）
+const RED: &str = "\x1b[31m";
 
 /// 带颜色的优先级标签；仅当 stdout 是终端时上色（管道/重定向时保持纯文本）
 fn colored_priority(p: Priority) -> String {
@@ -171,21 +187,72 @@ fn pad(text: &str, width: usize) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// 截止时间（due）辅助
+// ---------------------------------------------------------------------------
+
+/// 解析截止时间字符串为日期时间；支持 "YYYY-MM-DD"（当天 23:59:59 截止）与 "YYYY-MM-DD HH:MM"
+fn parse_due(s: &str) -> Result<NaiveDateTime, String> {
+    if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M") {
+        return Ok(dt);
+    }
+    if let Ok(d) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        return Ok(d.and_hms_opt(23, 59, 59).expect("23:59:59 合法"));
+    }
+    Err("截止时间格式应为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM。".to_string())
+}
+
+/// 任务是否已逾期（未完成且截止时间早于当前时间）
+fn due_overdue(task: &Task) -> bool {
+    if task.status != Status::Pending {
+        return false;
+    }
+    match &task.due {
+        Some(s) => parse_due(s).map(|dt| dt < Local::now().naive_local()).unwrap_or(false),
+        None => false,
+    }
+}
+
+/// 截止时间单元格文本：无截止显示 "-"，逾期追加红色 "!"（非终端不加色）
+fn due_cell(task: &Task) -> String {
+    match &task.due {
+        None => "-".to_string(),
+        Some(s) => {
+            if due_overdue(task) {
+                if std::io::stdout().is_terminal() {
+                    format!("{}{}!{}", RED, s, RESET)
+                } else {
+                    format!("{}!", s)
+                }
+            } else {
+                s.clone()
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 各子命令实现（返回 Result，错误统一在 main 里处理）
 // ---------------------------------------------------------------------------
 
 /// todo add：添加任务
-fn cmd_add(path: &PathBuf, text: &str, priority: Priority) -> Result<(), String> {
+fn cmd_add(path: &PathBuf, text: &str, priority: Priority, due: Option<&str>) -> Result<(), String> {
     if text.trim().is_empty() {
         return Err("任务内容不能为空。".to_string());
     }
+    // 校验并规范化截止时间（空白视为未提供）
+    let due = due
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| parse_due(s).map(|_| s.to_string()))
+        .transpose()?;
+
     let mut data = load_data(path);
-    // 新任务：自增 ID + 当前日期
     let task = Task {
         id: data.next_id,
         text: text.trim().to_string(),
         priority,
         status: Status::Pending,
+        due,
         created_at: Local::now().format("%Y-%m-%d").to_string(),
     };
     data.next_id += 1;
@@ -195,20 +262,38 @@ fn cmd_add(path: &PathBuf, text: &str, priority: Priority) -> Result<(), String>
     Ok(())
 }
 
-/// todo list：列出任务
-fn cmd_list(path: &PathBuf, status_filter: Option<Status>, as_json: bool) -> Result<(), String> {
-    let data = load_data(path);
-    // 按状态过滤；未指定则全部
-    let mut tasks: Vec<&Task> = data
-        .tasks
+/// 按状态/关键词收集任务（关键词匹配文本，不区分大小写）
+fn collect_tasks<'a>(data: &'a Data, status_filter: Option<Status>, keyword: Option<&str>) -> Vec<&'a Task> {
+    let kw = keyword.map(str::to_lowercase);
+    data.tasks
         .iter()
         .filter(|t| status_filter.is_none() || t.status == status_filter.unwrap())
-        .collect();
-    // 排序：待办在前；同状态下高优先级在前
-    tasks.sort_by_key(|t| (t.status != Status::Pending, t.priority.weight()));
+        .filter(|t| match &kw {
+            Some(k) => t.text.to_lowercase().contains(k.as_str()),
+            None => true,
+        })
+        .collect()
+}
 
+/// 排序：待办始终在前；同状态下按 --sort 指定的键排序
+fn sort_tasks(tasks: &mut Vec<&Task>, sort: SortBy) {
+    match sort {
+        SortBy::Priority => tasks.sort_by_key(|t| (t.status != Status::Pending, t.priority.weight(), t.id)),
+        SortBy::Created => tasks.sort_by_key(|t| (t.status != Status::Pending, t.created_at.clone(), t.id)),
+        SortBy::Due => tasks.sort_by_key(|t| {
+            (
+                t.status != Status::Pending,
+                t.due.is_none(), // 无截止的排最后
+                t.due.clone().unwrap_or_default(),
+                t.id,
+            )
+        }),
+    }
+}
+
+/// 渲染任务列表：--json 输出 JSON，否则输出对齐表格
+fn render_tasks(tasks: &[&Task], status_filter: Option<Status>, as_json: bool) -> Result<(), String> {
     if as_json {
-        // 机器可读输出
         println!("{}", serde_json::to_string_pretty(&tasks).map_err(|e| e.to_string())?);
         return Ok(());
     }
@@ -225,28 +310,61 @@ fn cmd_list(path: &PathBuf, status_filter: Option<Status>, as_json: bool) -> Res
     // 计算各列显示宽度（中文按 2 列），保证对齐
     let id_w = tasks.iter().map(|t| t.id.to_string().width()).max().unwrap_or(2).max(2);
     let text_w = tasks.iter().map(|t| t.text.width()).max().unwrap_or(2).max(4);
+    let due_w = tasks
+        .iter()
+        .map(|t| due_cell(t).width())
+        .max()
+        .unwrap_or(4)
+        .max(4);
 
     let header = format!(
-        "{}  {} {} {}  创建日期",
+        "{}  {} {} {}  {}  {}",
         pad("ID", id_w),
         pad("状态", 4),
         pad("优先级", 4),
         pad("任务", text_w),
+        pad("截止", due_w),
+        "创建日期",
     );
     println!("{}", header);
     println!("{}", "-".repeat(header.width()));
     for t in tasks {
         let status = if t.status == Status::Done { "完成" } else { "待办" };
         println!(
-            "{}  {} {} {}  {}",
+            "{}  {} {} {}  {}  {}",
             pad(&t.id.to_string(), id_w),
             pad(status, 4),
             pad(&colored_priority(t.priority), 4),
             pad(&t.text, text_w),
+            pad(&due_cell(t), due_w),
             t.created_at,
         );
     }
     Ok(())
+}
+
+/// todo list：列出任务
+fn cmd_list(path: &PathBuf, status_filter: Option<Status>, as_json: bool, sort: SortBy) -> Result<(), String> {
+    let data = load_data(path);
+    let mut tasks = collect_tasks(&data, status_filter, None);
+    sort_tasks(&mut tasks, sort);
+    render_tasks(&tasks, status_filter, as_json)
+}
+
+/// todo search：按关键词搜索任务
+fn cmd_search(
+    path: &PathBuf,
+    keyword: &str,
+    status_filter: Option<Status>,
+    as_json: bool,
+) -> Result<(), String> {
+    if keyword.trim().is_empty() {
+        return Err("搜索关键词不能为空。".to_string());
+    }
+    let data = load_data(path);
+    let mut tasks = collect_tasks(&data, status_filter, Some(keyword.trim()));
+    sort_tasks(&mut tasks, SortBy::Priority);
+    render_tasks(&tasks, status_filter, as_json)
 }
 
 /// 按 ID 查找任务；找不到返回错误信息
@@ -257,59 +375,121 @@ fn find_task<'a>(data: &'a Data, task_id: u64) -> Result<&'a Task, String> {
         .ok_or_else(|| format!("不存在 ID 为 {} 的任务。可用 todo list 查看。", task_id))
 }
 
-/// todo done：标记完成（幂等）
-fn cmd_done(path: &PathBuf, task_id: u64) -> Result<(), String> {
+/// todo done：批量标记完成（幂等；任一 ID 不存在则不修改并报错）
+fn cmd_done(path: &PathBuf, ids: &[u64]) -> Result<(), String> {
     let mut data = load_data(path);
-    // 先验证任务存在（不存在直接报错，避免下面 unwrap）
-    find_task(&data, task_id)?;
-    // 在一个块内完成"修改状态 + 取出要打印的信息"，
-    // 块结束后可变借用即释放，之后才能安全地不可变借用 data 保存文件
-    let (id, text, already_done) = {
+    // 先全部验证存在，避免部分成功
+    for id in ids {
+        find_task(&data, *id)?;
+    }
+    for id in ids {
+        let task = data.tasks.iter_mut().find(|t| t.id == *id).expect("上一步已验证存在");
+        if task.status == Status::Done {
+            println!("任务 #{} 已是完成状态。", id);
+        } else {
+            println!("已完成任务 #{}: {}", task.id, task.text);
+            task.status = Status::Done;
+        }
+    }
+    save_data(path, &data);
+    Ok(())
+}
+
+/// todo undo：把任务恢复为待办
+fn cmd_undo(path: &PathBuf, task_id: u64) -> Result<(), String> {
+    let mut data = load_data(path);
+    let task = data
+        .tasks
+        .iter_mut()
+        .find(|t| t.id == task_id)
+        .ok_or_else(|| format!("不存在 ID 为 {} 的任务。可用 todo list 查看。", task_id))?;
+    if task.status == Status::Pending {
+        println!("任务 #{} 已是待办状态。", task_id);
+    } else {
+        println!("已恢复任务 #{}: {}", task.id, task.text);
+        task.status = Status::Pending;
+    }
+    save_data(path, &data);
+    Ok(())
+}
+
+/// todo delete：批量删除任务（任一 ID 不存在则不修改并报错）
+fn cmd_delete(path: &PathBuf, ids: &[u64]) -> Result<(), String> {
+    let mut data = load_data(path);
+    for id in ids {
+        find_task(&data, *id)?;
+    }
+    for id in ids {
+        let removed = data.tasks.iter().find(|t| t.id == *id).cloned().expect("上一步已验证存在");
+        data.tasks.retain(|t| t.id != *id);
+        println!("已删除任务 #{}: {}", removed.id, removed.text);
+    }
+    save_data(path, &data);
+    Ok(())
+}
+
+/// todo edit：修改任务文本/优先级/截止时间（至少提供一项）
+fn cmd_edit(
+    path: &PathBuf,
+    task_id: u64,
+    new_text: Option<&str>,
+    new_priority: Option<Priority>,
+    new_due: Option<Option<String>>, // Some(Some(s)) 设置截止；Some(None) 清除截止
+) -> Result<(), String> {
+    if new_text.is_none() && new_priority.is_none() && new_due.is_none() {
+        return Err("请至少提供一项修改：--text / --priority / --due / --no-due。".to_string());
+    }
+    let mut data = load_data(path);
+    // 在一个块内完成修改并拷贝出要打印的信息，块结束后可变借用释放
+    let (id, text) = {
         let task = data
             .tasks
             .iter_mut()
             .find(|t| t.id == task_id)
-            .expect("上一步已验证存在");
-        let already = task.status == Status::Done;
-        if !already {
-            task.status = Status::Done;
+            .ok_or_else(|| format!("不存在 ID 为 {} 的任务。可用 todo list 查看。", task_id))?;
+
+        if let Some(t) = new_text {
+            if t.trim().is_empty() {
+                return Err("任务内容不能为空。".to_string());
+            }
+            task.text = t.trim().to_string();
         }
-        (task.id, task.text.clone(), already) // 拷贝出 id 和文本，避免借用残留
+        if let Some(p) = new_priority {
+            task.priority = p;
+        }
+        if let Some(due_opt) = new_due {
+            task.due = match due_opt {
+                Some(s) => {
+                    let s = s.trim().to_string();
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(parse_due(&s).map(|_| s)?)
+                    }
+                }
+                None => None,
+            };
+        }
+        (task.id, task.text.clone())
     };
-    save_data(path, &data); // 此处 data 只剩不可变借用，合法
-    if already_done {
-        println!("任务 #{} 已是完成状态。", id);
-    } else {
-        println!("已完成任务 #{}: {}", id, text);
-    }
+    save_data(path, &data);
+    println!("已更新任务 #{}: {}", id, text);
     Ok(())
 }
 
-/// todo delete：删除任务
-fn cmd_delete(path: &PathBuf, task_id: u64) -> Result<(), String> {
-    let mut data = load_data(path);
-    // retain：保留所有 id 不匹配的任务，即删除目标任务
-    let removed = data.tasks.iter().find(|t| t.id == task_id).cloned();
-    match removed {
-        Some(task) => {
-            data.tasks.retain(|t| t.id != task_id);
-            save_data(path, &data);
-            println!("已删除任务 #{}: {}", task.id, task.text);
-            Ok(())
-        }
-        None => Err(format!("不存在 ID 为 {} 的任务。可用 todo list 查看。", task_id)),
-    }
-}
-
-/// todo stats：统计信息
+/// todo stats：统计信息（总数/完成/待办/逾期/优先级分布）
 fn cmd_stats(path: &PathBuf) -> Result<(), String> {
     let data = load_data(path);
     let total = data.tasks.len();
     let done = data.tasks.iter().filter(|t| t.status == Status::Done).count();
     let pending = total - done;
+    let overdue = data.tasks.iter().filter(|t| due_overdue(t)).count();
     println!("任务总数：{}", total);
     println!("已完成：{}", done);
     println!("待办：{}", pending);
+    if pending > 0 {
+        println!("已逾期：{}", overdue);
+    }
     if total > 0 {
         println!("待办优先级分布：");
         for p in [Priority::High, Priority::Medium, Priority::Low] {
@@ -356,6 +536,9 @@ enum Commands {
         /// 优先级：high/medium/low（默认 medium）
         #[arg(short, long, help_heading = "选项", default_value = "medium")]
         priority: Priority,
+        /// 截止时间：YYYY-MM-DD 或 YYYY-MM-DD HH:MM
+        #[arg(long, help_heading = "选项")]
+        due: Option<String>,
     },
     /// 列出任务
     #[command(disable_help_flag = true)]
@@ -363,23 +546,65 @@ enum Commands {
         /// 按状态过滤：pending/done
         #[arg(long, help_heading = "选项")]
         status: Option<Status>,
+        /// 排序：priority/created/due（默认 priority）
+        #[arg(long, help_heading = "选项", default_value = "priority")]
+        sort: SortBy,
         /// 以 JSON 输出（机器可读）
         #[arg(long, help_heading = "选项")]
         json: bool,
     },
-    /// 标记任务完成
+    /// 标记任务完成（支持多个 ID）
     #[command(disable_help_flag = true)]
     Done {
+        /// 任务 ID（可多个）
+        #[arg(help_heading = "选项", required = true, num_args = 1..)]
+        ids: Vec<u64>,
+    },
+    /// 恢复任务为待办
+    #[command(disable_help_flag = true)]
+    Undo {
         /// 任务 ID
         #[arg(help_heading = "选项")]
         id: u64,
     },
-    /// 删除任务
+    /// 删除任务（支持多个 ID）
     #[command(disable_help_flag = true)]
     Delete {
+        /// 任务 ID（可多个）
+        #[arg(help_heading = "选项", required = true, num_args = 1..)]
+        ids: Vec<u64>,
+    },
+    /// 修改任务
+    #[command(disable_help_flag = true)]
+    Edit {
         /// 任务 ID
         #[arg(help_heading = "选项")]
         id: u64,
+        /// 新任务内容
+        #[arg(long, help_heading = "选项")]
+        text: Option<String>,
+        /// 新优先级：high/medium/low
+        #[arg(long, help_heading = "选项")]
+        priority: Option<Priority>,
+        /// 新截止时间：YYYY-MM-DD 或 YYYY-MM-DD HH:MM
+        #[arg(long, help_heading = "选项", conflicts_with = "no_due")]
+        due: Option<String>,
+        /// 清除截止时间
+        #[arg(long, help_heading = "选项", conflicts_with = "due")]
+        no_due: bool,
+    },
+    /// 按关键词搜索任务
+    #[command(disable_help_flag = true)]
+    Search {
+        /// 搜索关键词（位置参数）
+        #[arg(help_heading = "选项")]
+        keyword: String,
+        /// 按状态过滤：pending/done
+        #[arg(long, help_heading = "选项")]
+        status: Option<Status>,
+        /// 以 JSON 输出（机器可读）
+        #[arg(long, help_heading = "选项")]
+        json: bool,
     },
     /// 显示统计信息
     #[command(disable_help_flag = true)]
@@ -521,10 +746,20 @@ fn main() {
 
     // 分发子命令；Result 统一在这里处理错误与退出码
     let result = match cli.command {
-        Commands::Add { text, priority } => cmd_add(&path, &text, priority),
-        Commands::List { status, json } => cmd_list(&path, status, json),
-        Commands::Done { id } => cmd_done(&path, id),
-        Commands::Delete { id } => cmd_delete(&path, id),
+        Commands::Add { text, priority, due } => cmd_add(&path, &text, priority, due.as_deref()),
+        Commands::List { status, sort, json } => cmd_list(&path, status, json, sort),
+        Commands::Done { ids } => cmd_done(&path, &ids),
+        Commands::Undo { id } => cmd_undo(&path, id),
+        Commands::Delete { ids } => cmd_delete(&path, &ids),
+        Commands::Edit { id, text, priority, due, no_due } => {
+            let new_due = if no_due {
+                Some(None)
+            } else {
+                due.map(Some)
+            };
+            cmd_edit(&path, id, text.as_deref(), priority, new_due)
+        }
+        Commands::Search { keyword, status, json } => cmd_search(&path, &keyword, status, json),
         Commands::Stats => cmd_stats(&path),
     };
 
