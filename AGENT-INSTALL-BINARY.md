@@ -22,7 +22,7 @@ uname -m    # arm64 / x86_64
 
 ```bash
 # 设置版本（替换为实际 tag，如 v0.1.1）
-VERSION=v0.1.1
+VERSION=v0.1.2
 ASSET="<上表对应文件名>"
 
 # 安装目录（确保在 PATH 中；不存在则创建）
