@@ -9,6 +9,7 @@
 //!     todo edit <id> [--text 新内容] [--priority high] [--due 截止] [--no-due]
 //!     todo search <关键词> [--status pending|done] [--json]
 //!     todo stats                                        统计信息（含逾期数）
+//!     todo update [--yes]                                 主动检查并更新到最新版本
 //!
 //! 设计要点（对应 clig.dev 指南）：
 //!     - 使用 clap 解析参数：自动生成 -h/--help、用法错误（退出码 2）
@@ -671,6 +672,13 @@ enum Commands {
     /// 显示统计信息
     #[command(disable_help_flag = true)]
     Stats,
+    /// 主动检查并更新到最新版本
+    #[command(disable_help_flag = true)]
+    Update {
+        /// 跳过确认，直接更新（适合脚本/非交互环境）
+        #[arg(short, long, help_heading = "选项")]
+        yes: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -721,6 +729,19 @@ fn localize_help(cmd: &mut clap::Command) {
     *cmd = c; // 写回
 }
 
+/// 构建 GitHub 更新器（no_confirm=true 时更新不询问用户）
+fn build_updater(no_confirm: bool) -> Result<self_update::backends::github::Update, self_update::errors::Error> {
+    self_update::backends::github::Update::configure()
+        .repo_owner("czwjss")
+        .repo_name("todo-cli")
+        .bin_name("todo")
+        .current_version(env!("CARGO_PKG_VERSION"))
+        .target(self_update::get_target())
+        .show_output(false)
+        .no_confirm(no_confirm)
+        .build()
+}
+
 /// 运行时检查更新：有新版本时提示用户，用户确认后再自动下载并替换自身。
 /// 仅在交互终端执行，避免阻塞脚本/管道；每 24 小时最多检查一次。
 fn maybe_check_update() {
@@ -738,18 +759,6 @@ fn maybe_check_update() {
     if !guard.should_check().unwrap_or(true) {
         return;
     }
-
-    let build_updater = |no_confirm: bool| {
-        self_update::backends::github::Update::configure()
-            .repo_owner("czwjss")
-            .repo_name("todo-cli")
-            .bin_name("todo")
-            .current_version(env!("CARGO_PKG_VERSION"))
-            .target(self_update::get_target())
-            .show_output(false)
-            .no_confirm(no_confirm)
-            .build()
-    };
 
     let updater = match build_updater(false) {
         Ok(u) => u,
@@ -793,6 +802,54 @@ fn maybe_check_update() {
     let _ = guard.record_check();
 }
 
+/// 主动检查更新（todo update）：不受 24 小时频率限制，明确输出检查结果。
+/// 有新版本时交互确认后更新；--yes 直接更新，适合脚本/非交互环境。
+fn cmd_update(yes: bool) -> Result<(), String> {
+    let updater = build_updater(false).map_err(|e| format!("更新器初始化失败：{e}"))?;
+
+    let newer = match updater.is_update_available() {
+        Ok(Some(release)) => release,
+        Ok(None) => {
+            println!("当前已是最新版本 v{}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        Err(e) => return Err(format!("检查更新失败：{e}")),
+    };
+    let version = newer.version().to_string();
+
+    if !yes {
+        // 非交互且未指定 --yes：提示用法，不阻塞脚本
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+            println!(
+                "发现新版本 v{version}（当前 v{}）。非交互环境如需自动更新，请使用：todo update --yes",
+                env!("CARGO_PKG_VERSION")
+            );
+            return Ok(());
+        }
+        print!(
+            "发现新版本 v{version}（当前 v{}），是否更新？[y/N] ",
+            env!("CARGO_PKG_VERSION")
+        );
+        io::stdout().flush().map_err(|e| format!("输出失败：{e}"))?;
+        let mut answer = String::new();
+        io::stdin()
+            .read_line(&mut answer)
+            .map_err(|e| format!("读取输入失败：{e}"))?;
+        if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+            println!("已跳过更新。");
+            return Ok(());
+        }
+    }
+
+    match build_updater(true).and_then(|u| u.update()) {
+        Ok(status) => {
+            println!("已更新到 v{}", status.version());
+            Ok(())
+        }
+        Err(e) => Err(format!("更新失败：{e}")),
+    }
+}
+
 fn main() {
     // 先取 clap 自动生成的命令，做本地化后再解析
     let mut cmd = Cli::command();
@@ -802,8 +859,10 @@ fn main() {
     let cli = Cli::from_arg_matches_mut(&mut matches).unwrap_or_else(|e| e.exit());
     let path = data_file();
 
-    // 运行时自更新检查（仅在交互终端且有新版本时提示）
-    maybe_check_update();
+    // 运行时自更新检查（仅在交互终端且有新版本时提示；update 命令自身负责检查，避免重复提示）
+    if !matches!(&cli.command, Commands::Update { .. }) {
+        maybe_check_update();
+    }
 
     // 分发子命令；Result 统一在这里处理错误与退出码
     let result = match cli.command {
@@ -832,6 +891,7 @@ fn main() {
             json,
         } => cmd_search(&path, &keyword, status, json),
         Commands::Stats => cmd_stats(&path),
+        Commands::Update { yes } => cmd_update(yes),
     };
 
     if let Err(msg) = result {
