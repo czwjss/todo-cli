@@ -6,7 +6,7 @@
 ![CI](https://img.shields.io/github/actions/workflow/status/czwjss/todo-cli/build.yml)
 ![crates.io](https://img.shields.io/crates/v/czwjss-todo-cli)
 ![PyPI](https://img.shields.io/pypi/v/czwjss-todo-cli)
-![License](https://img.shields.io/github/license/czwjss/todo-cli)
+![License](https://img.shields.io/github/license/czwjss/todo-cli?cacheSeconds=3600&v=2)
 
 ## ✨ 功能
 
