@@ -1,0 +1,12 @@
+[package]
+name = "todo"
+version = "0.1.0"
+edition = "2024"
+description = "练手用命令行任务清单工具（Rust 版本）"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }   # 参数解析（同 Python argparse 的角色）
+serde = { version = "1", features = ["derive"] }  # 结构体 <-> JSON 序列化
+serde_json = "1"                                  # JSON 读写
+chrono = "0.4"                                    # 日期（创建任务时间）
+unicode-width = "0.2"                             # 计算终端显示宽度（中文对齐）
