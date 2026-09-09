@@ -87,7 +87,7 @@ jobs:
   publish-crates:
     name: Publish to crates.io
     needs: build
-    if: github.event_name == 'push'   # 仅 tag 推送时发布；workflow_dispatch 补传 tag 不重复发布
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
