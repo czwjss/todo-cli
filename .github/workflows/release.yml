@@ -33,7 +33,7 @@ jobs:
             target: aarch64-apple-darwin
             asset: todo-aarch64-apple-darwin
             binary: todo
-          - os: macos-13
+          - os: macos-14
             target: x86_64-apple-darwin
             asset: todo-x86_64-apple-darwin
             binary: todo
@@ -43,6 +43,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Build release
         run: cargo build --release --manifest-path rust/Cargo.toml --target ${{ matrix.target }}
