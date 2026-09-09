@@ -1,4 +1,4 @@
-# AGENTS.md —— todo CLI 安装指引（面向 AI Agent）
+# AGENT-INSTALL.md —— todo CLI 安装指引（面向 AI Agent）
 
 本文件用于让 AI Agent 自动安装并验证 todo CLI。请严格按以下步骤执行，命令可直接复制运行。
 
@@ -58,10 +58,16 @@ todo --help      # 应输出中文帮助，含 add/list/done/delete/stats 子命
 
 ## 5. 更新
 
+与安装同一方式：**重新下载最新版 Release 二进制并覆盖安装**（直接重跑第 2 步）。
+
+自动获取最新版本号：
+
 ```bash
-# 重新执行第 2 步（下载新版本覆盖），或：
-cargo install todo --force   # 开发者选项，需已安装 Rust 工具链
+VERSION=$(curl -s https://api.github.com/repos/czwjss/todo-cli/releases/latest \
+  | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
 ```
+
+> 可选（开发者）：已安装 Rust 工具链时可用 `cargo install todo --force`，但**不是标准流程**。
 
 ## 6. 卸载
 
