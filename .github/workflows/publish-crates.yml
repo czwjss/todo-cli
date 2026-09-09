@@ -1,0 +1,37 @@
+name: Publish crates.io
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的 tag（例如 v0.1.1）'
+        required: true
+        default: 'v0.1.1'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
+          echo "待发布版本：${VERSION}"
+          if curl -fsSL -A "todo-cli-release-ci" "https://crates.io/api/v1/crates/czwjss-todo-cli" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if any(v['num']=='$VERSION' for v in d.get('versions',[])) else 1)"; then
+            echo "crates.io 已存在 ${VERSION}，跳过发布"
+          else
+            cargo publish --manifest-path rust/Cargo.toml
+          fi
