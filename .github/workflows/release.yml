@@ -101,11 +101,7 @@ jobs:
         run: |
           VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
           echo "待发布版本：${VERSION}"
-          if curl -fsSL -A "todo-cli-release-ci" "https://crates.io/api/v1/crates/czwjss-todo-cli" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-sys.exit(0 if any(v['num'] == '$VERSION' for v in d.get('versions', [])) else 1)
-"; then
+          if curl -fsSL -A "todo-cli-release-ci" "https://crates.io/api/v1/crates/czwjss-todo-cli" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if any(v['num']=='$VERSION' for v in d.get('versions',[])) else 1)"; then
             echo "crates.io 已存在 ${VERSION}，跳过发布"
           else
             cargo publish --manifest-path rust/Cargo.toml
