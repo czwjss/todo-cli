@@ -56,23 +56,4 @@ todo --help      # 应输出中文帮助，含 add/list/done/delete/stats 子命
 | 下载 404 | 版本号错误，先查最新 Release：`curl -s https://api.github.com/repos/czwjss/todo-cli/releases/latest` |
 | macOS "无法打开" | 需对二进制执行 `xattr -d com.apple.quarantine <文件路径>` 或右键打开（未签名产物） |
 
-## 5. 更新
-
-与安装同一方式：**重新下载最新版 Release 二进制并覆盖安装**（直接重跑第 2 步）。
-
-自动获取最新版本号：
-
-```bash
-VERSION=$(curl -s https://api.github.com/repos/czwjss/todo-cli/releases/latest \
-  | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
-```
-
-> 可选（开发者）：已安装 Rust 工具链时可用 `cargo install todo --force`，但**不是标准流程**。
-
-## 6. 卸载
-
-```bash
-rm "${HOME}/.local/bin/todo"   # 删除二进制即可；如需清理数据，再删 ~/.todo/
-```
-
 > 注：安装说明依赖发布产物，Release 未发布前 URL 不可用。发布后本文件无需改动（URL 模板固定）。
