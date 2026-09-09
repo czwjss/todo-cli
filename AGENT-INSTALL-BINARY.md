@@ -1,6 +1,4 @@
-# AGENT-INSTALL-BINARY.md —— todo CLI 预编译二进制安装指引（面向 AI Agent）
-
-本文件用于让 AI Agent 通过 **GitHub Release 预编译二进制** 安装并验证 todo CLI。命令可直接复制运行。
+# AGENT-INSTALL-BINARY.md —— todo CLI 预编译二进制安装
 
 ## 1. 检测环境
 
@@ -10,8 +8,6 @@ uname -m    # arm64 / x86_64
 ```
 
 ## 2. 确定下载文件名
-
-按检测结果组合：
 
 | 系统 | 架构 | 文件名 |
 | --- | --- | --- |
@@ -56,5 +52,3 @@ todo --help      # 应输出中文帮助，含 add/list/done/delete/stats
 | `command not found: todo` | PATH 未包含安装目录，执行第 3 步的 PATH 配置 |
 | 下载 404 | 版本号错误，先查最新 Release：`curl -s https://api.github.com/repos/czwjss/todo-cli/releases/latest` |
 | macOS "无法打开" | 执行 `xattr -d com.apple.quarantine <文件路径>` 或右键打开（未签名产物） |
-
-> 本文件仅覆盖预编译二进制方式；cargo / pip 安装见根目录 README.md。
