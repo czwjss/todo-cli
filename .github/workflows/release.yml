@@ -83,3 +83,19 @@ jobs:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
           files: dist/*
           fail_on_unmatched_files: true
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: build
+    if: github.event_name == 'push'   # 仅 tag 推送时发布；workflow_dispatch 补传 tag 不重复发布
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --manifest-path rust/Cargo.toml

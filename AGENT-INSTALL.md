@@ -11,13 +11,22 @@ uname -s
 uname -m
 ```
 
-## 2. 下载并安装
+## 2. 安装
+
+### 方式 A：cargo install（推荐，有 Rust 工具链时）
+
+```bash
+cargo install czwjss-todo-cli
+# 安装后命令为 todo（与包名不同，见 rust/Cargo.toml 的 [[bin]]）
+```
+
+### 方式 B：下载预编译二进制（无 Rust 工具链时）
 
 二进制来自 GitHub Release（发布后 URL 格式固定为下方形式）。
 
 ```bash
 # 设置版本（发布后替换为实际 tag，如 v0.1.0）
-VERSION=v0.1.0
+VERSION=v0.1.1
 
 # 按第 1 步检测结果组合下载名：
 #   todo-aarch64-apple-darwin    macOS ARM
@@ -52,8 +61,9 @@ todo --help      # 应输出中文帮助，含 add/list/done/delete/stats 子命
 
 | 现象 | 处理 |
 | --- | --- |
-| `command not found: todo` | PATH 未包含安装目录，执行第 2 步的 PATH 配置 |
+| `command not found: todo` | PATH 未包含安装目录，执行第 2 步方式 B 的 PATH 配置 |
 | 下载 404 | 版本号错误，先查最新 Release：`curl -s https://api.github.com/repos/czwjss/todo-cli/releases/latest` |
 | macOS "无法打开" | 需对二进制执行 `xattr -d com.apple.quarantine <文件路径>` 或右键打开（未签名产物） |
+| cargo install 失败 | 确认 Rust 工具链版本（edition 2024 需较新 stable），或改用方式 B |
 
 > 注：安装说明依赖发布产物，Release 未发布前 URL 不可用。发布后本文件无需改动（URL 模板固定）。

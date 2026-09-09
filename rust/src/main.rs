@@ -18,7 +18,7 @@
 use std::{
     env,
     fs,
-    io::IsTerminal, // IsTerminal：判断 stdout 是否被终端读取（决定是否输出颜色）
+    io::{self, IsTerminal, Write}, // IsTerminal/Write：判断终端并刷新输出（更新提示用）
     path::PathBuf,
     process,
 };
@@ -434,6 +434,79 @@ fn localize_help(cmd: &mut clap::Command) {
     *cmd = c; // 写回
 }
 
+
+/// 运行时检查更新：有新版本时提示用户，用户确认后再自动下载并替换自身。
+/// 仅在交互终端执行，避免阻塞脚本/管道；每 24 小时最多检查一次。
+fn maybe_check_update() {
+    use std::time::Duration;
+    use self_update::check_interval::UpdateCheckGuard;
+
+    // 非交互（管道/脚本/重定向）不提示，保持原有行为
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return;
+    }
+
+    // 检查频率控制：避免每次运行都联网
+    let stamp = env::temp_dir().join("todo-cli-update-check");
+    let guard = UpdateCheckGuard::new(stamp, Duration::from_secs(24 * 60 * 60));
+    if !guard.should_check().unwrap_or(true) {
+        return;
+    }
+
+    let build_updater = |no_confirm: bool| {
+        self_update::backends::github::Update::configure()
+            .repo_owner("czwjss")
+            .repo_name("todo-cli")
+            .bin_name("todo")
+            .current_version(env!("CARGO_PKG_VERSION"))
+            .target(self_update::get_target())
+            .show_output(false)
+            .no_confirm(no_confirm)
+            .build()
+    };
+
+    let updater = match build_updater(false) {
+        Ok(u) => u,
+        Err(_) => return,
+    };
+
+    let newer = match updater.is_update_available() {
+        Ok(Some(release)) => release,
+        Ok(None) => {
+            let _ = guard.record_check();
+            return;
+        }
+        Err(_) => {
+            let _ = guard.record_check();
+            return;
+        }
+    };
+
+    print!(
+        "发现新版本 v{}（当前 v{}），是否更新？[y/N] ",
+        newer.version(),
+        env!("CARGO_PKG_VERSION")
+    );
+    let _ = io::stdout().flush();
+
+    let mut answer = String::new();
+    if io::stdin().read_line(&mut answer).is_err() {
+        let _ = guard.record_check();
+        return;
+    }
+    if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+        println!("已跳过更新。");
+        let _ = guard.record_check();
+        return;
+    }
+
+    match build_updater(true).and_then(|u| u.update()) {
+        Ok(status) => println!("已更新到 v{}", status.version()),
+        Err(e) => eprintln!("更新失败：{e}"),
+    }
+    let _ = guard.record_check();
+}
+
 fn main() {
     // 先取 clap 自动生成的命令，做本地化后再解析
     let mut cmd = Cli::command();
@@ -442,6 +515,9 @@ fn main() {
     let mut matches = cmd.get_matches();
     let cli = Cli::from_arg_matches_mut(&mut matches).unwrap_or_else(|e| e.exit());
     let path = data_file();
+
+    // 运行时自更新检查（仅在交互终端且有新版本时提示）
+    maybe_check_update();
 
     // 分发子命令；Result 统一在这里处理错误与退出码
     let result = match cli.command {

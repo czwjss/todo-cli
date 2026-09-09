@@ -1,8 +1,17 @@
 [package]
-name = "todo"
-version = "0.1.0"
+name = "czwjss-todo-cli"
+version = "0.1.1"
 edition = "2024"
 description = "练手用命令行任务清单工具（Rust 版本）"
+license = "MIT"
+repository = "https://github.com/czwjss/todo-cli"
+keywords = ["todo", "cli", "task", "todo-list"]
+categories = ["command-line-utilities"]
+readme = "README.md"
+
+[[bin]]
+name = "todo"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }   # 参数解析（同 Python argparse 的角色）
@@ -10,3 +19,6 @@ serde = { version = "1", features = ["derive"] }  # 结构体 <-> JSON 序列化
 serde_json = "1"                                  # JSON 读写
 chrono = "0.4"                                    # 日期（创建任务时间）
 unicode-width = "0.2"                             # 计算终端显示宽度（中文对齐）
+
+# 运行时自更新：检测 GitHub Release、下载对应平台二进制并替换自身
+self_update = { version = "1.3.0", default-features = false, features = ["ureq", "native-tls", "github"] }
