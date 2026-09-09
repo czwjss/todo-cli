@@ -53,6 +53,7 @@ jobs:
         shell: bash
         run: |
           cp "rust/target/${{ matrix.target }}/release/${{ matrix.binary }}" "${{ matrix.asset }}"
+          echo "${{ inputs.tag || github.ref_name }}" > tag.txt
           ls -lh "${{ matrix.asset }}"
 
       - name: Upload build artifact
@@ -61,3 +62,9 @@ jobs:
           name: binary-${{ matrix.target }}
           path: ${{ matrix.asset }}
           if-no-files-found: error
+
+      - name: Upload tag info
+        uses: actions/upload-artifact@v4
+        with:
+          name: tag-info
+          path: tag.txt

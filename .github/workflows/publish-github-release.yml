@@ -23,12 +23,24 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
 
+      - name: Download tag info
+        uses: actions/download-artifact@v4
+        with:
+          name: tag-info
+          path: .tag
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
       - name: List assets
         run: ls -lh dist
+
+      - name: Resolve tag
+        id: tag
+        run: echo "name=$(cat .tag/tag.txt)" >> "$GITHUB_OUTPUT"
 
       - name: Publish / upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.workflow_run.head_branch }}
+          tag_name: ${{ steps.tag.outputs.name }}
           files: dist/*
           fail_on_unmatched_files: true
