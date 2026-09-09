@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "czwjss-todo-cli"
-version = "0.1.3"
+version = "0.1.4"
 description = "练手用命令行任务清单工具（Python 版本）"
 readme = "README.md"
 license = "MIT"
