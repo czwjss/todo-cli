@@ -69,6 +69,3 @@ pip uninstall czwjss-todo-cli       # pip 安装
 └── .github/     CI/CD 工作流
 ```
 
-## 📄 许可
-
-[MIT](rust/LICENSE)
