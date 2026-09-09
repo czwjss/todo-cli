@@ -39,7 +39,7 @@ jobs:
             binary: todo
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -57,14 +57,14 @@ jobs:
           ls -lh "${{ matrix.asset }}"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binary-${{ matrix.target }}
           path: ${{ matrix.asset }}
           if-no-files-found: error
 
       - name: Upload tag info
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tag-info
           path: tag.txt

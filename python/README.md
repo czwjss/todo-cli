@@ -13,9 +13,12 @@ pip install ./python
 安装后命令为 `todo`：
 
 ```bash
-todo add "写周报" --priority high
-todo list
+todo add "写周报" --priority high --due "2026-09-09 18:00"
+todo list --sort due
 todo done 1
+todo undo 1
+todo edit 1 --priority low
+todo search "周报"
 todo delete 2
 todo stats
 ```

@@ -101,13 +101,13 @@ struct Task {
     status: Status,
     #[serde(default)] // 兼容旧数据文件（无 due 字段）
     due: Option<String>, // 截止时间，如 "2026-09-09 18:00" 或 "2026-09-09"；None 表示无
-    created_at: String,  // 创建日期，如 "2026-09-08"
+    created_at: String, // 创建日期，如 "2026-09-08"
 }
 
 /// 整个数据文件的结构
 #[derive(Debug, Serialize, Deserialize)]
 struct Data {
-    next_id: u64,    // 下一个可用 ID（自增，删除后不复用）
+    next_id: u64, // 下一个可用 ID（自增，删除后不复用）
     tasks: Vec<Task>,
 }
 
@@ -120,20 +120,21 @@ fn data_file() -> PathBuf {
     if let Ok(path) = env::var("TODO_FILE") {
         return PathBuf::from(path);
     }
-    let dir = env::var("TODO_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            // 未指定时用用户主目录下的 .todo
-            let home = env::var("HOME").expect("无法确定 HOME 目录");
-            PathBuf::from(home).join(".todo")
-        });
+    let dir = env::var("TODO_DIR").map(PathBuf::from).unwrap_or_else(|_| {
+        // 未指定时用用户主目录下的 .todo
+        let home = env::var("HOME").expect("无法确定 HOME 目录");
+        PathBuf::from(home).join(".todo")
+    });
     dir.join("tasks.json")
 }
 
 /// 从 JSON 文件加载数据；文件不存在时返回空结构
 fn load_data(path: &PathBuf) -> Data {
     if !path.exists() {
-        return Data { next_id: 1, tasks: Vec::new() };
+        return Data {
+            next_id: 1,
+            tasks: Vec::new(),
+        };
     }
     let raw = fs::read_to_string(path).unwrap_or_else(|e| {
         eprintln!("错误：无法读取数据文件 {}（{}）", path.display(), e);
@@ -207,7 +208,9 @@ fn due_overdue(task: &Task) -> bool {
         return false;
     }
     match &task.due {
-        Some(s) => parse_due(s).map(|dt| dt < Local::now().naive_local()).unwrap_or(false),
+        Some(s) => parse_due(s)
+            .map(|dt| dt < Local::now().naive_local())
+            .unwrap_or(false),
         None => false,
     }
 }
@@ -235,7 +238,12 @@ fn due_cell(task: &Task) -> String {
 // ---------------------------------------------------------------------------
 
 /// todo add：添加任务
-fn cmd_add(path: &PathBuf, text: &str, priority: Priority, due: Option<&str>) -> Result<(), String> {
+fn cmd_add(
+    path: &PathBuf,
+    text: &str,
+    priority: Priority,
+    due: Option<&str>,
+) -> Result<(), String> {
     if text.trim().is_empty() {
         return Err("任务内容不能为空。".to_string());
     }
@@ -263,7 +271,11 @@ fn cmd_add(path: &PathBuf, text: &str, priority: Priority, due: Option<&str>) ->
 }
 
 /// 按状态/关键词收集任务（关键词匹配文本，不区分大小写）
-fn collect_tasks<'a>(data: &'a Data, status_filter: Option<Status>, keyword: Option<&str>) -> Vec<&'a Task> {
+fn collect_tasks<'a>(
+    data: &'a Data,
+    status_filter: Option<Status>,
+    keyword: Option<&str>,
+) -> Vec<&'a Task> {
     let kw = keyword.map(str::to_lowercase);
     data.tasks
         .iter()
@@ -278,8 +290,12 @@ fn collect_tasks<'a>(data: &'a Data, status_filter: Option<Status>, keyword: Opt
 /// 排序：待办始终在前；同状态下按 --sort 指定的键排序
 fn sort_tasks(tasks: &mut Vec<&Task>, sort: SortBy) {
     match sort {
-        SortBy::Priority => tasks.sort_by_key(|t| (t.status != Status::Pending, t.priority.weight(), t.id)),
-        SortBy::Created => tasks.sort_by_key(|t| (t.status != Status::Pending, t.created_at.clone(), t.id)),
+        SortBy::Priority => {
+            tasks.sort_by_key(|t| (t.status != Status::Pending, t.priority.weight(), t.id))
+        }
+        SortBy::Created => {
+            tasks.sort_by_key(|t| (t.status != Status::Pending, t.created_at.clone(), t.id))
+        }
         SortBy::Due => tasks.sort_by_key(|t| {
             (
                 t.status != Status::Pending,
@@ -292,15 +308,25 @@ fn sort_tasks(tasks: &mut Vec<&Task>, sort: SortBy) {
 }
 
 /// 渲染任务列表：--json 输出 JSON，否则输出对齐表格
-fn render_tasks(tasks: &[&Task], status_filter: Option<Status>, as_json: bool) -> Result<(), String> {
+fn render_tasks(
+    tasks: &[&Task],
+    status_filter: Option<Status>,
+    as_json: bool,
+) -> Result<(), String> {
     if as_json {
-        println!("{}", serde_json::to_string_pretty(&tasks).map_err(|e| e.to_string())?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&tasks).map_err(|e| e.to_string())?
+        );
         return Ok(());
     }
 
     if tasks.is_empty() {
         let hint = match status_filter {
-            Some(s) => format!("（没有任务，状态：{}）", if s == Status::Done { "done" } else { "pending" }),
+            Some(s) => format!(
+                "（没有任务，状态：{}）",
+                if s == Status::Done { "done" } else { "pending" }
+            ),
             None => "（没有任务）".to_string(),
         };
         println!("{}", hint);
@@ -308,8 +334,18 @@ fn render_tasks(tasks: &[&Task], status_filter: Option<Status>, as_json: bool) -
     }
 
     // 计算各列显示宽度（中文按 2 列），保证对齐
-    let id_w = tasks.iter().map(|t| t.id.to_string().width()).max().unwrap_or(2).max(2);
-    let text_w = tasks.iter().map(|t| t.text.width()).max().unwrap_or(2).max(4);
+    let id_w = tasks
+        .iter()
+        .map(|t| t.id.to_string().width())
+        .max()
+        .unwrap_or(2)
+        .max(2);
+    let text_w = tasks
+        .iter()
+        .map(|t| t.text.width())
+        .max()
+        .unwrap_or(2)
+        .max(4);
     let due_w = tasks
         .iter()
         .map(|t| due_cell(t).width())
@@ -329,7 +365,11 @@ fn render_tasks(tasks: &[&Task], status_filter: Option<Status>, as_json: bool) -
     println!("{}", header);
     println!("{}", "-".repeat(header.width()));
     for t in tasks {
-        let status = if t.status == Status::Done { "完成" } else { "待办" };
+        let status = if t.status == Status::Done {
+            "完成"
+        } else {
+            "待办"
+        };
         println!(
             "{}  {} {} {}  {}  {}",
             pad(&t.id.to_string(), id_w),
@@ -344,7 +384,12 @@ fn render_tasks(tasks: &[&Task], status_filter: Option<Status>, as_json: bool) -
 }
 
 /// todo list：列出任务
-fn cmd_list(path: &PathBuf, status_filter: Option<Status>, as_json: bool, sort: SortBy) -> Result<(), String> {
+fn cmd_list(
+    path: &PathBuf,
+    status_filter: Option<Status>,
+    as_json: bool,
+    sort: SortBy,
+) -> Result<(), String> {
     let data = load_data(path);
     let mut tasks = collect_tasks(&data, status_filter, None);
     sort_tasks(&mut tasks, sort);
@@ -368,7 +413,7 @@ fn cmd_search(
 }
 
 /// 按 ID 查找任务；找不到返回错误信息
-fn find_task<'a>(data: &'a Data, task_id: u64) -> Result<&'a Task, String> {
+fn find_task(data: &Data, task_id: u64) -> Result<&Task, String> {
     data.tasks
         .iter()
         .find(|t| t.id == task_id)
@@ -383,7 +428,11 @@ fn cmd_done(path: &PathBuf, ids: &[u64]) -> Result<(), String> {
         find_task(&data, *id)?;
     }
     for id in ids {
-        let task = data.tasks.iter_mut().find(|t| t.id == *id).expect("上一步已验证存在");
+        let task = data
+            .tasks
+            .iter_mut()
+            .find(|t| t.id == *id)
+            .expect("上一步已验证存在");
         if task.status == Status::Done {
             println!("任务 #{} 已是完成状态。", id);
         } else {
@@ -420,7 +469,12 @@ fn cmd_delete(path: &PathBuf, ids: &[u64]) -> Result<(), String> {
         find_task(&data, *id)?;
     }
     for id in ids {
-        let removed = data.tasks.iter().find(|t| t.id == *id).cloned().expect("上一步已验证存在");
+        let removed = data
+            .tasks
+            .iter()
+            .find(|t| t.id == *id)
+            .cloned()
+            .expect("上一步已验证存在");
         data.tasks.retain(|t| t.id != *id);
         println!("已删除任务 #{}: {}", removed.id, removed.text);
     }
@@ -481,7 +535,11 @@ fn cmd_edit(
 fn cmd_stats(path: &PathBuf) -> Result<(), String> {
     let data = load_data(path);
     let total = data.tasks.len();
-    let done = data.tasks.iter().filter(|t| t.status == Status::Done).count();
+    let done = data
+        .tasks
+        .iter()
+        .filter(|t| t.status == Status::Done)
+        .count();
     let pending = total - done;
     let overdue = data.tasks.iter().filter(|t| due_overdue(t)).count();
     println!("任务总数：{}", total);
@@ -499,7 +557,11 @@ fn cmd_stats(path: &PathBuf) -> Result<(), String> {
                 .filter(|t| t.status == Status::Pending && t.priority == p)
                 .count();
             // 简易进度条：每项一个 # 符号
-            let bar = if count > 0 { "#".repeat(count) } else { "-".to_string() };
+            let bar = if count > 0 {
+                "#".repeat(count)
+            } else {
+                "-".to_string()
+            };
             println!("  {}优先级：{}  {}", p.label(), count, bar);
         }
     }
@@ -621,8 +683,8 @@ fn localize_help(cmd: &mut clap::Command) {
     // clap 的这些方法消耗 self（builder 模式），所以先取出所有权，处理后写回
     let mut c = std::mem::take(cmd);
     c = c
-        .help_template(TEMPLATE)            // 中文模板（硬编码"用法："）
-        .subcommand_help_heading("子命令");  // 子命令列表标题
+        .help_template(TEMPLATE) // 中文模板（硬编码"用法："）
+        .subcommand_help_heading("子命令"); // 子命令列表标题
     // 顶层添加中文 -h/--help 与 -V/--version（builder 方式，绕开 derive 的 required 问题）
     c = c
         .arg(
@@ -659,12 +721,11 @@ fn localize_help(cmd: &mut clap::Command) {
     *cmd = c; // 写回
 }
 
-
 /// 运行时检查更新：有新版本时提示用户，用户确认后再自动下载并替换自身。
 /// 仅在交互终端执行，避免阻塞脚本/管道；每 24 小时最多检查一次。
 fn maybe_check_update() {
-    use std::time::Duration;
     use self_update::check_interval::UpdateCheckGuard;
+    use std::time::Duration;
 
     // 非交互（管道/脚本/重定向）不提示，保持原有行为
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
@@ -746,20 +807,30 @@ fn main() {
 
     // 分发子命令；Result 统一在这里处理错误与退出码
     let result = match cli.command {
-        Commands::Add { text, priority, due } => cmd_add(&path, &text, priority, due.as_deref()),
+        Commands::Add {
+            text,
+            priority,
+            due,
+        } => cmd_add(&path, &text, priority, due.as_deref()),
         Commands::List { status, sort, json } => cmd_list(&path, status, json, sort),
         Commands::Done { ids } => cmd_done(&path, &ids),
         Commands::Undo { id } => cmd_undo(&path, id),
         Commands::Delete { ids } => cmd_delete(&path, &ids),
-        Commands::Edit { id, text, priority, due, no_due } => {
-            let new_due = if no_due {
-                Some(None)
-            } else {
-                due.map(Some)
-            };
+        Commands::Edit {
+            id,
+            text,
+            priority,
+            due,
+            no_due,
+        } => {
+            let new_due = if no_due { Some(None) } else { due.map(Some) };
             cmd_edit(&path, id, text.as_deref(), priority, new_due)
         }
-        Commands::Search { keyword, status, json } => cmd_search(&path, &keyword, status, json),
+        Commands::Search {
+            keyword,
+            status,
+            json,
+        } => cmd_search(&path, &keyword, status, json),
         Commands::Stats => cmd_stats(&path),
     };
 
