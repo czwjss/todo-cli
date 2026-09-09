@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "czwjss-todo-cli"
+version = "0.1.1"
+description = "练手用命令行任务清单工具（Python 版本）"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+keywords = ["todo", "cli", "task", "todo-list"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.scripts]
+todo = "todo:main"
+
+[tool.setuptools]
+py-modules = ["todo"]
