@@ -37,8 +37,14 @@ jobs:
         env:
           PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python -m pip install --upgrade twine
-          twine upload --non-interactive -u __token__ -p "$PYPI_API_TOKEN" dist/*
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)
+          echo "待发布版本：${VERSION}"
+          if curl -fsSL "https://pypi.org/pypi/czwjss-todo-cli/${VERSION}/json" >/dev/null 2>&1; then
+            echo "PyPI 已存在 ${VERSION}，跳过上传"
+          else
+            python -m pip install --upgrade twine
+            twine upload --non-interactive -u __token__ -p "$PYPI_API_TOKEN" dist/*
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
